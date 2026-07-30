@@ -1,12 +1,12 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.database import Base
 
 class TelemetryModel(Base):
     __tablename__ = "telemetry"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     temperature = Column(Float, nullable=False)
     bond_force = Column(Float, nullable=False)
     ultrasonic_power = Column(Float, nullable=False)
@@ -30,7 +30,7 @@ class AlarmModel(Base):
     __tablename__ = "alarms"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     code = Column(String, nullable=False)
     message = Column(String, nullable=False)
     severity = Column(String, nullable=False) # "INFO", "WARNING", "CRITICAL"

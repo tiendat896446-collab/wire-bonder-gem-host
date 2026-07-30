@@ -151,6 +151,13 @@ async def set_driver_mode(mode: str):
         return {"status": "success", "mode": mode}
     raise HTTPException(status_code=503, detail="Hardware service unavailable.")
 
+@app.post("/api/control/config_serial")
+async def config_serial(port: str, baudrate: int):
+    if hardware_worker:
+        hardware_worker.config_serial(port, baudrate)
+        return {"status": "success", "port": port, "baudrate": baudrate}
+    raise HTTPException(status_code=503, detail="Hardware service unavailable.")
+
 @app.get("/api/alarms")
 async def get_alarms(severity: Optional[str] = None):
     async with async_session_maker() as session:

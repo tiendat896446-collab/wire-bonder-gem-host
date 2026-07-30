@@ -45,21 +45,47 @@ class ControlPanel(ctk.CTkFrame):
         )
         self.btn_stop.pack(fill="x", padx=10, pady=5)
 
-        # ---------------- MODE SELECTION DROP DOWN ----------------
+        # ---------------- MODE & SERIAL CONFIGURATION ----------------
         self.mode_frame = ctk.CTkFrame(self)
         self.mode_frame.pack(fill="x", padx=10, pady=5)
 
-        ctk.CTkLabel(self.mode_frame, text="Active Driver Mode:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=10, pady=5)
+        # Sub-grid inside mode_frame for neat layout
+        self.mode_frame.grid_columnconfigure(1, weight=1)
 
+        # Mode Row
+        ctk.CTkLabel(self.mode_frame, text="Active Driver Mode:", font=ctk.CTkFont(size=11, weight="bold")).grid(row=0, column=0, sticky="w", padx=10, pady=5)
         self.mode_var = ctk.StringVar(value="Hardware")
         self.mode_dropdown = ctk.CTkOptionMenu(
             self.mode_frame,
             values=["Hardware", "Simulation"],
             variable=self.mode_var,
-            width=110,
+            width=120,
             command=self._on_mode_change
         )
-        self.mode_dropdown.pack(side="right", padx=10, pady=5)
+        self.mode_dropdown.grid(row=0, column=1, sticky="e", padx=10, pady=5)
+
+        # Port Row
+        ctk.CTkLabel(self.mode_frame, text="COM Port:", font=ctk.CTkFont(size=11)).grid(row=1, column=0, sticky="w", padx=10, pady=3)
+        self.entry_port = ctk.CTkEntry(self.mode_frame, placeholder_text="COM1", width=120)
+        self.entry_port.grid(row=1, column=1, sticky="e", padx=10, pady=3)
+        self.entry_port.insert(0, "COM1")
+
+        # Baudrate Row
+        ctk.CTkLabel(self.mode_frame, text="Baudrate:", font=ctk.CTkFont(size=11)).grid(row=2, column=0, sticky="w", padx=10, pady=3)
+        self.entry_baud = ctk.CTkEntry(self.mode_frame, placeholder_text="9600", width=120)
+        self.entry_baud.grid(row=2, column=1, sticky="e", padx=10, pady=3)
+        self.entry_baud.insert(0, "9600")
+
+        # Apply Serial Config Button
+        self.btn_serial_config = ctk.CTkButton(
+            self.mode_frame,
+            text="APPLY PORT CONFIG",
+            fg_color="#33B5E5",
+            hover_color="#0099CC",
+            height=24,
+            command=self._on_apply_serial_config
+        )
+        self.btn_serial_config.grid(row=3, column=0, columnspan=2, sticky="we", padx=10, pady=(5, 10))
 
         # ---------------- PARAMETERS / RECIPE FORM ----------------
         self.recipe_frame = ctk.CTkFrame(self)
@@ -171,10 +197,28 @@ class ControlPanel(ctk.CTkFrame):
 
     def _on_mode_change(self, mode):
         print(f"[UI] Changing Driver Mode manually to {mode}")
-        # We can implement a simple POST route or call a local method.
-        # For simplicity, we can register a local handler or trigger a POST call:
-        # We'll expose a quick POST endpoint on backend: /api/control/mode
         self._api_call("POST", f"/api/control/mode?mode={mode}")
+
+    def _on_apply_serial_config(self):
+        port = self.entry_port.get().strip()
+        baud_str = self.entry_baud.get().strip()
+
+        if not port:
+            messagebox.showerror("Validation Error", "COM Port cannot be empty.")
+            return
+
+        try:
+            baudrate = int(baud_str)
+        except ValueError:
+            messagebox.showerror("Validation Error", "Baudrate must be an integer.")
+            return
+
+        if baudrate <= 0:
+            messagebox.showerror("Validation Error", "Baudrate must be positive.")
+            return
+
+        print(f"[UI] Applying dynamic Serial Config: {port} at {baudrate} bps")
+        self._api_call("POST", f"/api/control/config_serial?port={port}&baudrate={baudrate}")
 
     def _on_apply_recipe(self):
         # 1. Gather & Validate parameters

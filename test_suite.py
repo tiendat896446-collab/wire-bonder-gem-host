@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from datetime import datetime, timezone
 from sqlalchemy import select
 from backend.database import init_db, async_session_maker
 from backend.models import TelemetryModel, AlarmModel, RecipeModel
@@ -12,7 +13,7 @@ class TestWireBonderSystem(unittest.IsolatedAsyncioTestCase):
         await init_db()
 
     async def test_full_data_path_and_state_transitions(self):
-        print("\n[TEST] Beginning End-to-End System Integration Test...")
+        print("\n[TEST] Beginning Refined End-to-End System Integration Test...")
 
         # 1. Start worker
         telemetry_received = []
@@ -20,6 +21,16 @@ class TestWireBonderSystem(unittest.IsolatedAsyncioTestCase):
             telemetry_received.append(data)
 
         worker = HardwareWorker(db_session_maker=async_session_maker, on_telemetry_callback=on_telemetry)
+
+        # Check initial dynamic configurations
+        self.assertEqual(worker.port, "COM1")
+        self.assertEqual(worker.baudrate, 9600)
+
+        # Configure dynamically
+        worker.config_serial(port="COM9", baudrate=115200)
+        self.assertEqual(worker.port, "COM9")
+        self.assertEqual(worker.baudrate, 115200)
+
         await worker.start()
 
         # 2. Allow worker to generate a few telemetry points
@@ -33,8 +44,10 @@ class TestWireBonderSystem(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(150.0 <= last_tel["temperature"] <= 300.0)
         self.assertEqual(last_tel["status"], "IDLE")
         self.assertEqual(last_tel["mode"], "Hardware") # Defaults to Hardware
+        self.assertEqual(last_tel["connected"], False) # Hardware is unplugged in test sandbox
+        self.assertEqual(last_tel["reconnecting"], True) # Background auto-reconnection loop is active
 
-        print("[TEST] Verified initial simulation parameters & IDLE state.")
+        print("[TEST] Verified initial simulation parameters, connection loop state, & IDLE state.")
 
         # 3. Simulate Setting a Recipe
         worker.set_recipe(

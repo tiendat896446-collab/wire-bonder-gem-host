@@ -2,7 +2,7 @@ import asyncio
 import random
 import math
 import serial
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Callable
 from backend.database import async_session_maker
 from backend.models import TelemetryModel, AlarmModel
@@ -22,12 +22,12 @@ class HardwareWorker:
     """
     Background worker that runs concurrently to manage connection with the Wire Bonder.
     Supports:
-    - Auto-detect / Serial port exploration (PySerial).
-    - Modbus client initialization (Pymodbus) with robust auto-reconnect.
-    - Automatic fallback to high-fidelity "Simulation" telemetry if physical device is disconnected
-      without stopping background reconnection retries.
-    - Explicit user override of system mode (forced Hardware vs forced Simulation).
-    - Background asyncio database logging.
+    - Non-blocking PySerial / Modbus client operations using asyncio.to_thread.
+    - Actual Modbus holding register reads when in physical Hardware mode.
+    - Configurable start registers for telemetry and status values.
+    - Dynamic Port & Baudrate configuration on-the-fly.
+    - High-fidelity Simulation fallback if connection fails or is disconnected.
+    - Background SQLite database logging using timezone-aware datetimes.
     """
     def __init__(self, db_session_maker=None, on_telemetry_callback: Callable[[Dict[str, Any]], None] = None):
         self.db_session_maker = db_session_maker or async_session_maker
@@ -39,10 +39,17 @@ class HardwareWorker:
         self.mode = "Hardware" # "Hardware" or "Simulation" (Defaults to Hardware mode)
         self.status = "IDLE" # "IDLE", "RUNNING", "ALARM"
 
-        # Serial & Modbus parameters
+        # Dynamic Serial & Modbus parameters
         self.port = "COM1"
         self.baudrate = 9600
         self.modbus_client = None
+
+        # Customizable Modbus Holding Register Map (Standard Industrial Spec)
+        self.reg_temp = 30001
+        self.reg_force = 30002
+        self.reg_power = 30003
+        self.reg_speed = 30004
+        self.reg_status = 30005
 
         # Telemetry variables
         self.temperature = 180.0
@@ -74,7 +81,7 @@ class HardwareWorker:
                 await self.running_task
             except asyncio.CancelledError:
                 pass
-        self._disconnect_hardware()
+        await asyncio.to_thread(self._disconnect_hardware)
         print("[HardwareWorker] Background worker stopped.")
 
     def set_recipe(self, name: str, bond_force: float, ultrasonic_power: float, temperature: float, bond_time: float):
@@ -90,8 +97,16 @@ class HardwareWorker:
         if mode in ["Hardware", "Simulation"]:
             self.mode = mode
             if mode == "Simulation":
-                self._disconnect_hardware()
+                asyncio.create_task(asyncio.to_thread(self._disconnect_hardware))
             print(f"[HardwareWorker] Mode manually overridden to: {self.mode}")
+
+    def config_serial(self, port: str, baudrate: int):
+        """Allows dynamic configuration of Port and Baudrate."""
+        self.port = port
+        self.baudrate = baudrate
+        # Force a reconnect next cycle with new config
+        asyncio.create_task(asyncio.to_thread(self._disconnect_hardware))
+        print(f"[HardwareWorker] Serial port configured dynamically: {port} at {baudrate} baud.")
 
     def start_bonding(self):
         if self.status != "ALARM":
@@ -142,30 +157,27 @@ class HardwareWorker:
 
     def _attempt_hardware_connection(self) -> bool:
         """
-        Attempts to connect to physical modbus or raw serial device on candidate ports.
+        Attempts to connect to physical modbus device on the dynamically configured port.
         Returns True if successful, False otherwise.
         """
         if not MODBUS_AVAILABLE:
             return False
 
-        # Candidates list for Windows/Linux/Mac
-        candidates = ["COM3", "COM4", "/dev/ttyUSB0", "/dev/ttyAMA0"]
-        for port in candidates:
-            try:
-                # Try opening serial port briefly
-                ser = serial.Serial(port, baudrate=self.baudrate, timeout=0.5)
-                ser.close()
+        try:
+            # Check if port exists/can be briefly opened via standard PySerial
+            ser = serial.Serial(self.port, baudrate=self.baudrate, timeout=0.5)
+            ser.close()
 
-                # Setup Modbus Client
-                self.modbus_client = ModbusClient(port=port, baudrate=self.baudrate, timeout=1.0)
-                if self.modbus_client.connect():
-                    self.port = port
-                    self.connected = True
-                    self.reconnecting = False
-                    print(f"[HardwareWorker] Successfully connected to Wire Bonder on {port}")
-                    return True
-            except Exception:
-                continue
+            # Setup and connect Modbus Client
+            self.modbus_client = ModbusClient(port=self.port, baudrate=self.baudrate, timeout=1.0)
+            if self.modbus_client.connect():
+                self.connected = True
+                self.reconnecting = False
+                print(f"[HardwareWorker] Successfully connected to Wire Bonder on {self.port} at {self.baudrate}")
+                return True
+        except Exception as e:
+            print(f"[HardwareWorker] Physical serial connection attempt failed on {self.port}: {e}")
+
         return False
 
     def _disconnect_hardware(self):
@@ -175,6 +187,47 @@ class HardwareWorker:
             except Exception:
                 pass
         self.connected = False
+
+    def _read_physical_registers(self) -> Dict[str, Any]:
+        """
+        Performs actual Modbus register reading from the connected wire bonder.
+        Queries consecutive holding/input registers mapping starting registers.
+        """
+        if not self.modbus_client or not self.connected:
+            raise RuntimeError("Modbus client is not connected.")
+
+        # Read holding registers starting from self.reg_temp
+        # We read 5 registers containing [Temp, Force, Power, Speed, Status]
+        res = self.modbus_client.read_holding_registers(address=self.reg_temp, count=5)
+        if res.isError():
+            raise RuntimeError(f"Modbus register read error: {res}")
+
+        # Registers typically return raw integers (scaled by 10 for decimals)
+        raw_temp = res.registers[0] / 10.0 if res.registers[0] > 0 else 180.0
+        raw_force = res.registers[1] / 10.0 if res.registers[1] > 0 else 45.0
+        raw_power = res.registers[2] / 10.0 if res.registers[2] > 0 else 60.0
+        raw_speed = float(res.registers[3])
+        raw_status_val = res.registers[4]
+
+        # Status mapping
+        status_map = {0: "IDLE", 1: "RUNNING", 2: "ALARM"}
+        mapped_status = status_map.get(raw_status_val, "IDLE")
+        self.status = mapped_status
+
+        self.temperature = raw_temp
+        self.bond_force = raw_force
+        self.ultrasonic_power = raw_power
+        self.speed = raw_speed
+        self.cycle_time = 3600.0 / self.speed if self.speed > 0 else 0.82
+
+        return {
+            "temperature": round(self.temperature, 2),
+            "bond_force": round(self.bond_force, 2),
+            "ultrasonic_power": round(self.ultrasonic_power, 2),
+            "speed": round(self.speed, 2),
+            "cycle_time": round(self.cycle_time, 2),
+            "status": self.status
+        }
 
     def _generate_simulation_telemetry(self) -> Dict[str, Any]:
         """Generates realistic fluctuations."""
@@ -224,10 +277,10 @@ class HardwareWorker:
         Main worker execution loop.
         Every second:
         1. Checks connection state. If in Hardware mode and disconnected:
-           - Attempts reconnect.
+           - Attempts reconnect (using asyncio.to_thread to stay non-blocking).
            - If it fails, stays in mode="Hardware" and connected=False, allowing future connection retries,
              but falls back to generating simulation telemetry so the UI remains active and updated.
-        2. Reads from Physical Hardware (via Modbus registers) if in Hardware mode and connected.
+        2. Reads from Physical Hardware (via Modbus registers) using asyncio.to_thread if in Hardware mode and connected.
         3. Saves telemetry log into SQLite DB.
         4. Broadcasts telemetry updates to UI.
         """
@@ -235,13 +288,13 @@ class HardwareWorker:
 
         while self.is_running:
             try:
-                # Connection / Reconnection logic
+                # Connection / Reconnection logic (NON-BLOCKING)
                 if self.mode == "Hardware" and not self.connected:
                     self.reconnecting = True
                     # Try to reconnect every 10 seconds to avoid flooding CPU
                     if reconnect_timer <= 0:
-                        print("[HardwareWorker] Attempting background hardware connection...")
-                        connected = self._attempt_hardware_connection()
+                        print(f"[HardwareWorker] Non-blocking background hardware connection attempt on {self.port}...")
+                        connected = await asyncio.to_thread(self._attempt_hardware_connection)
                         if not connected:
                             print("[HardwareWorker] Physical hardware not found. Falling back to Mock Simulation Telemetry.")
                         reconnect_timer = 10
@@ -254,24 +307,11 @@ class HardwareWorker:
                 telemetry_data = {}
                 if self.mode == "Hardware" and self.connected and self.modbus_client:
                     try:
-                        # Simulated read of registers
-                        self.temperature = 200.0 + random.uniform(-0.5, 0.5)
-                        self.bond_force = self.target_bond_force + random.uniform(-1.0, 1.0)
-                        self.ultrasonic_power = self.target_ultrasonic_power + random.uniform(-0.8, 0.8)
-                        self.speed = 3600 / 0.82
-                        self.cycle_time = 0.82
-
-                        telemetry_data = {
-                            "temperature": round(self.temperature, 2),
-                            "bond_force": round(self.bond_force, 2),
-                            "ultrasonic_power": round(self.ultrasonic_power, 2),
-                            "speed": round(self.speed, 2),
-                            "cycle_time": round(self.cycle_time, 2),
-                            "status": self.status
-                        }
+                        # Non-blocking Modbus register query (NON-BLOCKING)
+                        telemetry_data = await asyncio.to_thread(self._read_physical_registers)
                     except Exception as ex:
-                        print(f"[HardwareWorker] Error reading Modbus data: {ex}. Reverting to background reconnect.")
-                        self._disconnect_hardware()
+                        print(f"[HardwareWorker] Non-blocking register read error: {ex}. Reverting to background reconnect.")
+                        await asyncio.to_thread(self._disconnect_hardware)
                         telemetry_data = self._generate_simulation_telemetry()
                 else:
                     # Simulation Mode fallback (or manual Simulation mode)
@@ -281,7 +321,7 @@ class HardwareWorker:
                 telemetry_data["mode"] = self.mode
                 telemetry_data["connected"] = self.connected
                 telemetry_data["reconnecting"] = self.reconnecting
-                telemetry_data["timestamp"] = datetime.utcnow().isoformat()
+                telemetry_data["timestamp"] = datetime.now(timezone.utc).isoformat()
 
                 # Log to DB
                 async with self.db_session_maker() as session:
