@@ -1,0 +1,116 @@
+[MOCK EQUIPMENT] Đang cấu hình thiết bị mô phỏng...
+[MOCK EQUIPMENT] Khởi động và bắt đầu lắng nghe tại 127.0.0.1:5001...
+2026-07-30 02:15:52,230 [INFO] __main__.CustomEquipment: Connection enabled
+[MOCK EQUIPMENT] Đang chạy. Nhấn Ctrl+C để thoát.
+2026-07-30 02:15:53,755 [INFO] communication: < 'header': {session_id:0xffff, stream:00, function:00, p_type:0x00, s_type:0x01, system:0x9b320ba5, require_response:False}
+  Select.req
+2026-07-30 02:15:53,755 [INFO] communication: > 'header': {session_id:0xffff, stream:00, function:00, p_type:0x00, s_type:0x02, system:0x9b320ba5, require_response:False}
+  Select.rsp
+2026-07-30 02:15:53,757 [INFO] communication: > 'header': {session_id:0x0000, stream:01, function:13, p_type:0x00, s_type:0x00, system:0x7955c001, require_response:True}
+S1F13 W
+  <L [2]
+    <A "secsgem">
+    <A "0.3.0">
+  > .
+2026-07-30 02:15:53,759 [INFO] communication: < 'header': {session_id:0x0000, stream:01, function:13, p_type:0x00, s_type:0x00, system:0x9b320ba6, require_response:True}
+S1F13 W
+  <L> .
+2026-07-30 02:15:53,760 [INFO] communication: > 'header': {session_id:0x0000, stream:01, function:14, p_type:0x00, s_type:0x00, system:0x9b320ba6, require_response:False}
+S1F14
+  <L [2]
+    <B 0x0>
+    <L [2]
+      <A "secsgem">
+      <A "0.3.0">
+    >
+  > .
+
+############################################################
+[MOCK EQUIPMENT] Kết nối thành công! Bắt đầu gửi dữ liệu định kỳ...
+############################################################
+2026-07-30 02:15:53,762 [INFO] communication: < 'header': {session_id:0x0000, stream:01, function:14, p_type:0x00, s_type:0x00, system:0x7955c001, require_response:False}
+S1F14
+  <L [2]
+    <B 0x0>
+    <L>
+  > .
+2026-07-30 02:15:53,762 [WARNING] __main__.CustomEquipment: unexpected function received s01f14
+{session_id:0x0000, stream:01, function:14, p_type:0x00, s_type:0x00, system:0x7955c001, require_response:False}
+
+[MOCK EQUIPMENT SIM] Gửi S6F11 - Trạng thái: EXECUTING | Sản lượng: 121
+2026-07-30 02:15:55,763 [INFO] communication: > 'header': {session_id:0x0000, stream:06, function:11, p_type:0x00, s_type:0x00, system:0x7955c002, require_response:True}
+S6F11 W
+  <L [3]
+    <U1 1 >
+    <U1 101 >
+    <L [1]
+      <L [2]
+        <U2 1001 >
+        <L [2]
+          <A "EXECUTING">
+          <U1 121 >
+        >
+      >
+    >
+  > .
+2026-07-30 02:15:55,771 [INFO] communication: < 'header': {session_id:0x0000, stream:06, function:12, p_type:0x00, s_type:0x00, system:0x7955c002, require_response:False}
+S6F12
+  <B 0x0> .
+2026-07-30 02:15:55,771 [WARNING] __main__.CustomEquipment: unexpected function received s06f12
+{session_id:0x0000, stream:06, function:12, p_type:0x00, s_type:0x00, system:0x7955c002, require_response:False}
+
+[MOCK EQUIPMENT SIM] Gửi S5F1 - Báo lỗi (Alarm Set) - ALID: 99
+2026-07-30 02:15:58,764 [INFO] communication: > 'header': {session_id:0x0000, stream:05, function:01, p_type:0x00, s_type:0x00, system:0x7955c003, require_response:False}
+S5F1
+  <L [3]
+    <B 0x81>
+    <U1 99 >
+    <A "Wire bonder clamp tension error!">
+  > .
+2026-07-30 02:15:58,771 [INFO] communication: < 'header': {session_id:0x0000, stream:05, function:02, p_type:0x00, s_type:0x00, system:0x7955c003, require_response:False}
+S5F2
+  <B 0x0> .
+2026-07-30 02:15:58,771 [WARNING] __main__.CustomEquipment: unexpected function received s05f02
+{session_id:0x0000, stream:05, function:02, p_type:0x00, s_type:0x00, system:0x7955c003, require_response:False}
+
+[MOCK EQUIPMENT SIM] Gửi S5F1 - Xóa lỗi (Alarm Clear) - ALID: 99
+2026-07-30 02:16:02,766 [INFO] communication: > 'header': {session_id:0x0000, stream:05, function:01, p_type:0x00, s_type:0x00, system:0x7955c004, require_response:False}
+S5F1
+  <L [3]
+    <B 0x1>
+    <U1 99 >
+    <A "Wire bonder clamp tension resolved.">
+  > .
+2026-07-30 02:16:02,773 [INFO] communication: < 'header': {session_id:0x0000, stream:05, function:02, p_type:0x00, s_type:0x00, system:0x7955c004, require_response:False}
+S5F2
+  <B 0x0> .
+2026-07-30 02:16:02,773 [WARNING] __main__.CustomEquipment: unexpected function received s05f02
+{session_id:0x0000, stream:05, function:02, p_type:0x00, s_type:0x00, system:0x7955c004, require_response:False}
+
+[MOCK EQUIPMENT SIM] Gửi S6F11 - Trạng thái: IDLE | Sản lượng: 122
+2026-07-30 02:16:05,768 [INFO] communication: > 'header': {session_id:0x0000, stream:06, function:11, p_type:0x00, s_type:0x00, system:0x7955c005, require_response:True}
+S6F11 W
+  <L [3]
+    <U1 2 >
+    <U1 100 >
+    <L [1]
+      <L [2]
+        <U2 1001 >
+        <L [2]
+          <A "IDLE">
+          <U1 122 >
+        >
+      >
+    >
+  > .
+
+[MOCK EQUIPMENT SIM] Hoàn thành toàn bộ kịch bản mô phỏng truyền dữ liệu thành công!
+2026-07-30 02:16:05,776 [INFO] communication: < 'header': {session_id:0x0000, stream:06, function:12, p_type:0x00, s_type:0x00, system:0x7955c005, require_response:False}
+S6F12
+  <B 0x0> .
+2026-07-30 02:16:05,776 [WARNING] __main__.CustomEquipment: unexpected function received s06f12
+{session_id:0x0000, stream:06, function:12, p_type:0x00, s_type:0x00, system:0x7955c005, require_response:False}
+2026-07-30 02:16:08,991 [INFO] communication: < 'header': {session_id:0xffff, stream:00, function:00, p_type:0x00, s_type:0x09, system:0x9b320ba7, require_response:False}
+  Separate.req
+2026-07-30 02:16:08,996 [INFO] communication: > 'header': {session_id:0xffff, stream:00, function:00, p_type:0x00, s_type:0x09, system:0x7955c006, require_response:False}
+  Separate.req
