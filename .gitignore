@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+wire_bonder_data.db
+mock_output.log

@@ -1,0 +1,4 @@
+secsgem>=0.3.0
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.0.0
